@@ -1,0 +1,30 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# AI datasets, generated files and model artifacts
+workdir/
+datasets/
+data/
+*.pt
+*.pth
+*.joblib
+*.pkl
+
+# Frontend dependencies and builds
+node_modules/
+dist/
+
+# IDE and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

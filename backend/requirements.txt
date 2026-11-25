@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pymongo
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
+pydantic
+torch
+torchvision
+opencv-python-headless
+scikit-learn
+pandas
+numpy
+matplotlib
+joblib
