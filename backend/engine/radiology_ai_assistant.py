@@ -749,15 +749,23 @@ def train_svc(args, preset: Optional[str] = None) -> Path:
     return out / "svc.joblib"
 
 
-def load_svc(svc_dir: Path, device):
+def load_svc(svc_dir: Path, device, backbone=None):
     bundle = joblib.load(svc_dir / "svc.joblib")
-    bb = build_densenet(pretrained=False)
-    bb.load_state_dict(torch.load(svc_dir / "backbone.pt", map_location="cpu"))
-    cfg = PreprocConfig(**{**bundle["preproc"], "aug_alpha": tuple(bundle["preproc"]["aug_alpha"]),
-                           "aug_beta": tuple(bundle["preproc"]["aug_beta"])})
-    return bb.to(device).eval(), bundle, cfg
 
+    if backbone is None:
+        backbone = build_densenet(pretrained=False)
+        backbone.load_state_dict(
+            torch.load(svc_dir / "backbone.pt", map_location="cpu")
+        )
+        backbone = backbone.to(device).eval()
 
+    cfg = PreprocConfig(**{
+        **bundle["preproc"],
+        "aug_alpha": tuple(bundle["preproc"]["aug_alpha"]),
+        "aug_beta": tuple(bundle["preproc"]["aug_beta"])
+    })
+
+    return backbone, bundle, cfg
 # --------------------------------------------------------------------------- #
 # Evaluation on the held-out TEST split
 # --------------------------------------------------------------------------- #
@@ -921,19 +929,37 @@ class InferenceError(Exception):
 class InferenceService:
     def __init__(self, workdir: Path, preset: str, device: torch.device):
         self.device, self.preset = device, preset
+
         base = Path(workdir) / "runs" / preset
-        self.cnn = self.cnn_cfg = self.svc_bb = self.svc_bundle = self.svc_cfg = None
+
+        self.cnn = self.cnn_cfg = None
+        self.svc_bb = self.svc_bundle = self.svc_cfg = None
+
+        # Load CNN first
         if (base / "cnn" / "model.pt").exists():
-            self.cnn, self.cnn_cfg, _ = load_cnn(base / "cnn" / "model.pt", device)
+            self.cnn, self.cnn_cfg, _ = load_cnn(
+                base / "cnn" / "model.pt", device
+            )
+
+        # Reuse CNN backbone for SVC
         if (base / "svc" / "svc.joblib").exists():
-            self.svc_bb, self.svc_bundle, self.svc_cfg = load_svc(base / "svc", device)
+            self.svc_bb, self.svc_bundle, self.svc_cfg = load_svc(
+                base / "svc",
+                device,
+                backbone=self.cnn
+            )
+
         if self.cnn is None and self.svc_bundle is None:
             log.warning("no trained weights found under %s", base)
 
     @property
     def branches(self) -> List[str]:
-        return [b for b, ok in (("cnn", self.cnn is not None), ("svc", self.svc_bundle is not None)) if ok]
-
+        return [
+            b for b, ok in (
+                ("cnn", self.cnn is not None),
+                ("svc", self.svc_bundle is not None)
+            ) if ok
+        ]
     def validate(self, filename: str, data: bytes) -> np.ndarray:
         ext = Path(filename or "").suffix.lower()
         if ext not in IMAGE_EXTS:
